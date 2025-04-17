@@ -6,17 +6,9 @@ services:
     ports: [3000:3000]
     environment:
       - PIAPI_KEY
-      - KLING_PROVIDER
+      - KLING_PROVIDER=piapi
       - ADMIN_TOKEN
-      - FACESWAP_SERVICE_URL=http://faceswap:8000
     volumes:
       - ./:/app
       - /app/node_modules
       - /app/.next
-
-  faceswap:
-    build: ./faceswap
-    runtime: nvidia  # GPU node
-    expose: [8000]
-    volumes:
-      - ./faceswap:/app

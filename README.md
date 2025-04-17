@@ -9,7 +9,7 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
 ## Features
 
 - TikTok video extraction
-- Face-swapping using FaceFusion
+- Face-swapping via PiAPI
 - AI video generation with Kling 2.0 Master via PiAPI
 - Video concatenation using ffmpeg
 
@@ -20,7 +20,7 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
 - **State**: Zustand
 - **Video I/O**: ffmpeg-static, fluent-ffmpeg
 - **TikTok DL**: @prevter/tiktok-scraper
-- **Face-swap**: FaceFusion CLI (Python microservice with FastAPI)
+- **Face-swap**: PiAPI face swap endpoint ($0.01 per swap)
 - **Gen-AI video**: Kling 2.0 Master via PiAPI (pay-as-you-go at ~$0.16 per 5s clip)
 - **Temp storage**: OS /tmp + tmp-promise
 - **Auth**: Server-side internal authorization
@@ -30,8 +30,7 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
 ### Prerequisites
 
 - Node.js 20+
-- Docker and Docker Compose
-- NVIDIA GPU (for optimal face-swapping performance)
+- Docker (optional)
 
 ### Environment Setup
 
@@ -41,32 +40,24 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
    ```
 
 2. Fill in the required environment variables:
-   - `PIAPI_KEY`: Your PiAPI key for Kling 2.0 Master access
+   - `PIAPI_KEY`: Your PiAPI key for both face swap and Kling 2.0
    - `ADMIN_TOKEN`: A secret token for middleware route protection
 
 ### Development
 
-#### With Docker (recommended)
+#### With Docker (optional)
 
 ```bash
-# Build and run the services
+# Build and run the Next.js app
 docker-compose up --build
 ```
 
 #### Without Docker
 
-1. Start the Next.js app:
-   ```bash
-   npm install
-   npm run dev
-   ```
-
-2. Start the FaceFusion service (requires Python 3.10+):
-   ```bash
-   cd faceswap
-   pip install -r requirements.txt
-   uvicorn main:app --host 0.0.0.0 --port 8000
-   ```
+```bash
+npm install
+npm run dev
+```
 
 ### Usage
 
@@ -86,22 +77,24 @@ docker-compose up --build
  │   ├─ page.tsx               // wizard + ReactFlow canvas
  │   ├─ api/
  │   │   ├─ extract/route.ts   // TikTok → PNGs
- │   │   ├─ faceswap/route.ts  // proxy to Python svc
+ │   │   ├─ faceswap/route.ts  // PiAPI face swap client
  │   │   ├─ kling/route.ts     // create & poll two jobs
  │   │   └─ stitch/route.ts    // ffmpeg concat
  │   └─ lib/
  │       ├─ ffmpeg.ts
  │       ├─ tiktok.ts
- │       ├─ kling.ts           // PiAPI integration (pay-as-you-go)
+ │       ├─ kling.ts           // PiAPI Kling integration
+ │       ├─ faceswap.ts        // PiAPI face swap integration
  │       └─ tempHost.ts        // file.io temporary public hosting
- └─ faceswap/ (Docker)         // Python micro-service
 ```
 
 ## Cost Efficiency
 
-Using PiAPI's pay-as-you-go model for Kling 2.0:
-- Standard quality: $0.16 per 5-second clip
+Using PiAPI's pay-as-you-go model:
+- Face swap: $0.01 per image
+- Kling standard quality: $0.16 per 5-second clip
 - Two clips per video: $0.32 total cost
+- Full workflow cost: ~$0.35 per complete video
 - No minimum spend or bundles required
 - Render time: typically 25-40 seconds per clip
 

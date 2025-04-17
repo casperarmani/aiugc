@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
-import { dir } from "tmp-promise";
-import { compressImage } from "../../lib/ffmpeg";
+import { createFaceSwap, fetchFaceSwap } from "../../lib/faceswap";
+import pLimit from "p-limit";
 
-// This will be a proxy to the Python FaceFusion microservice
-const FACESWAP_SERVICE_URL = process.env.FACESWAP_SERVICE_URL || "http://faceswap:8000";
+// Limit concurrent face swap requests to 3 (PiAPI allows ~3 qps per key)
+const limiter = pLimit(3);
+
+// Helper function to delay execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,58 +28,90 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Create temp directory for processing
-    const tempDirObj = await dir({ unsafeCleanup: true });
+    // Convert images to base64
+    const sourceBuffer = Buffer.from(await sourceImage.arrayBuffer());
+    const targetBuffer = Buffer.from(await targetImage.arrayBuffer());
     
-    // Save files to temp directory
-    const sourceImagePath = path.join(tempDirObj.path, "source.png");
-    const targetImagePath = path.join(tempDirObj.path, "target.png");
-    
-    await fs.writeFile(sourceImagePath, Buffer.from(await sourceImage.arrayBuffer()));
-    await fs.writeFile(targetImagePath, Buffer.from(await targetImage.arrayBuffer()));
-    
-    // Check file size and compress if necessary (> 10MB)
-    const sourceStats = await fs.stat(sourceImagePath);
-    const targetStats = await fs.stat(targetImagePath);
-    
-    let finalSourcePath = sourceImagePath;
-    let finalTargetPath = targetImagePath;
-    
-    if (sourceStats.size > 10 * 1024 * 1024) {
-      finalSourcePath = await compressImage(sourceImagePath);
-    }
-    
-    if (targetStats.size > 10 * 1024 * 1024) {
-      finalTargetPath = await compressImage(targetImagePath);
-    }
-    
-    // Prepare request to FaceFusion microservice
-    const formDataToSend = new FormData();
-    formDataToSend.append("source", new Blob([await fs.readFile(finalSourcePath)]));
-    formDataToSend.append("target", new Blob([await fs.readFile(finalTargetPath)]));
-    
-    // Send request to FaceFusion service
-    const response = await fetch(`${FACESWAP_SERVICE_URL}/swap`, {
-      method: "POST",
-      body: formDataToSend
+    const sourceBase64 = sourceBuffer.toString("base64");
+    const targetBase64 = targetBuffer.toString("base64");
+
+    // Create face swap task with rate limiting
+    const taskId = await limiter(async () => {
+      try {
+        return await createFaceSwap(targetBase64, sourceBase64);
+      } catch (error: any) {
+        // Handle rate limiting (429) with retry
+        if (error.message.includes("429")) {
+          console.log("Rate limited by PiAPI. Retrying after 10s delay...");
+          await delay(10000);
+          return await createFaceSwap(targetBase64, sourceBase64);
+        }
+        throw error;
+      }
     });
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`FaceFusion service error: ${response.status} ${errorText}`);
+    // Poll for face swap result
+    const maxAttempts = 15;
+    let attempts = 0;
+    
+    while (attempts < maxAttempts) {
+      attempts++;
+      
+      try {
+        // Wait 3 seconds between polls
+        await delay(3000);
+        
+        const result = await fetchFaceSwap(taskId);
+        
+        // If completed, return the result
+        if (result.status === "COMPLETED" && result.url) {
+          // Fetch the image from URL to get base64 (optional, PiAPI already gives URL)
+          const response = await fetch(result.url);
+          const imageBuffer = Buffer.from(await response.arrayBuffer());
+          const base64 = `data:image/png;base64,${imageBuffer.toString("base64")}`;
+          
+          return NextResponse.json({
+            tempDir: null, // No local temp dir needed anymore
+            swappedImagePath: result.url,
+            base64
+          });
+        }
+        
+        // If failed, throw error
+        if (result.status === "FAILED") {
+          throw new Error("Face swap failed");
+        }
+        
+        // If rate limited, wait longer
+        if (result.status === 429) {
+          console.log("Rate limited during polling. Waiting 10s...");
+          await delay(10000);
+          attempts--; // Don't count this as an attempt
+          continue;
+        }
+        
+        // Otherwise continue polling
+        console.log(`Face swap status: ${result.status}, attempt ${attempts}/${maxAttempts}`);
+        
+      } catch (error) {
+        console.error("Error polling face swap:", error);
+        
+        // If we get a 429, wait longer but don't count as an attempt
+        if (error instanceof Error && error.message.includes("429")) {
+          console.log("Rate limited during polling. Waiting 10s...");
+          await delay(10000);
+          attempts--;
+          continue;
+        }
+        
+        // For other errors, just continue polling
+        console.log(`Error on attempt ${attempts}/${maxAttempts}, continuing...`);
+      }
     }
     
-    // Save the swapped image to temp directory
-    const swappedImageData = await response.arrayBuffer();
-    const swappedImagePath = path.join(tempDirObj.path, "swapped.png");
-    await fs.writeFile(swappedImagePath, Buffer.from(swappedImageData));
+    // If we've reached max attempts without success
+    throw new Error("Face swap timed out after multiple attempts");
     
-    // Return the swapped image
-    return NextResponse.json({
-      tempDir: tempDirObj.path,
-      swappedImagePath,
-      base64: `data:image/png;base64,${Buffer.from(swappedImageData).toString("base64")}`
-    });
   } catch (error: any) {
     console.error("Error in faceswap route:", error);
     return NextResponse.json(
