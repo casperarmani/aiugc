@@ -4,47 +4,12 @@ import path from "path";
 import fs from "fs/promises";
 import { dir } from "tmp-promise";
 
-// Import ffprobe path from the installed location directly
-// Detect OS and architecture
-const platform = process.platform;
-const arch = process.arch;
-
-// Map platform to folder name
-const platformMap: Record<string, string> = {
-  'darwin': 'darwin',
-  'win32': 'win32',
-  'linux': 'linux',
-};
-
-// Map architecture to folder name
-const archMap: Record<string, string> = {
-  'x64': 'x64',
-  'arm64': 'arm64',
-  'ia32': 'ia32',
-};
-
-// Add .exe extension for Windows
-const executableExt = platform === 'win32' ? '.exe' : '';
-const platformFolder = platformMap[platform] || 'darwin';
-const archFolder = archMap[arch] || 'x64';
-
-// Build the path
-const ffprobePath = path.join(
-  process.cwd(), 
-  'node_modules', 
-  'ffprobe-static', 
-  'bin', 
-  platformFolder, 
-  archFolder, 
-  `ffprobe${executableExt}`
-);
+// For debugging
+console.log("ffmpeg path from package:", ffmpegStatic);
 
 // Configure ffmpeg to use static binary
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic as string);
-}
-if (ffprobePath) {
-  ffmpeg.setFfprobePath(ffprobePath);
 }
 
 export interface StitchOptions {
