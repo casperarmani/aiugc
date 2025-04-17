@@ -21,9 +21,12 @@ const TikTokNode = ({ data }: { data: any }) => (
   <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[280px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">TikTok URL</h3>
     <input
-      type="url"
+      type="text"
       value={data.tikTokUrl}
-      onChange={(e) => data.setTikTokUrl(e.target.value)}
+      onChange={(e) => {
+        console.log("Input changed to:", e.target.value);
+        data.setTikTokUrl(e.target.value);
+      }}
       placeholder="https://www.tiktok.com/@username/video/1234567890"
       className="w-full px-3 py-2 border rounded-md mb-2 bg-white text-gray-900"
     />
@@ -234,7 +237,10 @@ export default function Home() {
         setTikTokUrl: store.setTikTokUrl,
         isLoading: store.isLoading,
         onExtract: async () => {
-          if (!store.tikTokUrl) {
+          // For debugging
+          console.log("Extract button clicked, tikTokUrl:", store.tikTokUrl);
+          
+          if (!store.tikTokUrl || store.tikTokUrl.trim() === '') {
             store.setError("Please enter a TikTok URL");
             return;
           }
@@ -672,7 +678,10 @@ export default function Home() {
             ...node,
             data: {
               ...node.data,
-              tikTokUrl: store.tikTokUrl
+              tikTokUrl: store.tikTokUrl,
+              setTikTokUrl: store.setTikTokUrl,
+              isLoading: store.isLoading,
+              onExtract: node.data.onExtract // Preserve the original handler
             }
           };
         }
@@ -683,7 +692,8 @@ export default function Home() {
             data: {
               ...node.data,
               frames: store.frames,
-              selectedFrames: store.selectedFrames
+              selectedFrames: store.selectedFrames,
+              onSelectFrame: node.data.onSelectFrame
             }
           };
         }
@@ -692,7 +702,8 @@ export default function Home() {
             ...node,
             data: {
               ...node.data,
-              faceImage: store.faceImage
+              faceImage: store.faceImage,
+              onFaceUpload: node.data.onFaceUpload
             }
           };
         }
@@ -703,7 +714,8 @@ export default function Home() {
               ...node.data,
               isLoading: store.isLoading,
               canSwap: store.faceImage !== null && store.selectedFrames.length > 0,
-              swappedFrames: store.swappedFrames
+              swappedFrames: store.swappedFrames,
+              onFaceSwap: node.data.onFaceSwap
             }
           };
         }
@@ -713,8 +725,10 @@ export default function Home() {
             data: {
               ...node.data,
               prompt: store.prompt,
+              setPrompt: store.setPrompt,
               isLoading: store.isLoading,
-              canGenerate: Object.keys(store.swappedFrames).length > 0 && store.prompt.length > 0
+              canGenerate: Object.keys(store.swappedFrames).length > 0 && store.prompt.length > 0,
+              onGenerate: node.data.onGenerate
             }
           };
         }
@@ -726,7 +740,9 @@ export default function Home() {
               generatedVideos: store.generatedVideos,
               selectedVideos: store.selectedVideos,
               isLoading: store.isLoading,
-              canStitch: store.selectedVideos.length > 0
+              canStitch: store.selectedVideos.length > 0,
+              onSelectVideo: node.data.onSelectVideo,
+              onStitch: node.data.onStitch
             }
           };
         }
