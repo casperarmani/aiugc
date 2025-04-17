@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Internal AI-UGC Generator
+
+A tool for generating ad-ready reels from TikTok videos with face-swapping and AI-generated content.
+
+## Project Overview
+
+Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel with swapped face & accurate motion, delivered in < 5 min, no user accounts.
+
+## Features
+
+- TikTok video extraction
+- Face-swapping using FaceFusion
+- AI video generation with Kling 2.0
+- Video concatenation using ffmpeg
+
+## Tech Stack
+
+- **Runtime/SSR**: Next.js 14 (App Router, TypeScript)
+- **UI**: React Flow + shadcn/ui (Tailwind)
+- **State**: Zustand
+- **Video I/O**: ffmpeg-static, fluent-ffmpeg
+- **TikTok DL**: @prevter/tiktok-scraper
+- **Face-swap**: FaceFusion CLI (Python microservice with FastAPI)
+- **Gen-AI video**: Kling 2.0 Master via open-api.klingai.com
+- **Temp storage**: OS /tmp + tmp-promise
+- **Auth**: .env-gated bearer token
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 20+
+- Docker and Docker Compose
+- NVIDIA GPU (for optimal face-swapping performance)
+
+### Environment Setup
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.local.example .env.local
+   ```
+
+2. Fill in the required environment variables:
+   - `KLING_AK`: Your Kling API access key
+   - `KLING_SK`: Your Kling API secret key
+   - `ADMIN_TOKEN`: A secret token for API route protection
+
+### Development
+
+#### With Docker (recommended)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Build and run the services
+docker-compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+#### Without Docker
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Start the Next.js app:
+   ```bash
+   npm install
+   npm run dev
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Start the FaceFusion service (requires Python 3.10+):
+   ```bash
+   cd faceswap
+   pip install -r requirements.txt
+   uvicorn main:app --host 0.0.0.0 --port 8000
+   ```
 
-## Learn More
+### Usage
 
-To learn more about Next.js, take a look at the following resources:
+1. Enter a TikTok URL
+2. Select frames for face-swapping
+3. Upload a face image
+4. Enter a creative prompt
+5. Generate videos with AI
+6. Select the best generated videos
+7. Download the final video
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+/src
+ ├─ app/
+ │   ├─ page.tsx               // wizard + ReactFlow canvas
+ │   ├─ api/
+ │   │   ├─ extract/route.ts   // TikTok → PNGs
+ │   │   ├─ faceswap/route.ts  // proxy to Python svc
+ │   │   ├─ kling/route.ts     // create & poll two jobs
+ │   │   └─ stitch/route.ts    // ffmpeg concat
+ │   └─ lib/
+ │       ├─ ffmpeg.ts
+ │       ├─ tiktok.ts
+ │       ├─ kling.ts
+ │       └─ jwt.ts
+ └─ faceswap/ (Docker)          // Python micro-service
+```
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Internal use only.
