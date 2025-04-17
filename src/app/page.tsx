@@ -18,14 +18,14 @@ import { useStore } from "./store";
 
 // Custom node components
 const TikTokNode = ({ data }: { data: any }) => (
-  <div className="p-4 border rounded-lg bg-white shadow-md w-[280px]">
+  <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[280px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">TikTok URL</h3>
     <input
       type="url"
       value={data.tikTokUrl}
       onChange={(e) => data.setTikTokUrl(e.target.value)}
       placeholder="https://www.tiktok.com/@username/video/1234567890"
-      className="w-full px-3 py-2 border rounded-md mb-2"
+      className="w-full px-3 py-2 border rounded-md mb-2 bg-white text-gray-900"
     />
     <button 
       onClick={data.onExtract}
@@ -38,7 +38,7 @@ const TikTokNode = ({ data }: { data: any }) => (
 );
 
 const FramesNode = ({ data }: { data: any }) => (
-  <div className="p-4 border rounded-lg bg-white shadow-md w-[320px]">
+  <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[320px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">Extracted Frames</h3>
     <div className="grid grid-cols-3 gap-2 mb-3">
       {data.frames ? (
@@ -78,7 +78,7 @@ const FramesNode = ({ data }: { data: any }) => (
           </div>
         </>
       ) : (
-        <div className="col-span-3 bg-muted p-4 text-center text-sm">
+        <div className="col-span-3 bg-gray-200 p-4 text-center text-sm text-gray-700">
           No frames extracted yet
         </div>
       )}
@@ -87,13 +87,13 @@ const FramesNode = ({ data }: { data: any }) => (
 );
 
 const FaceUploadNode = ({ data }: { data: any }) => (
-  <div className="p-4 border rounded-lg bg-white shadow-md w-[280px]">
+  <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[280px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">Face Upload</h3>
     <input
       type="file"
       accept="image/*"
       onChange={data.onFaceUpload}
-      className="w-full px-3 py-2 border rounded-md mb-2"
+      className="w-full px-3 py-2 border rounded-md mb-2 bg-white text-gray-900"
     />
     {data.faceImage && (
       <div className="mb-2">
@@ -108,7 +108,7 @@ const FaceUploadNode = ({ data }: { data: any }) => (
 );
 
 const FaceSwapNode = ({ data }: { data: any }) => (
-  <div className="p-4 border rounded-lg bg-white shadow-md w-[280px]">
+  <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[280px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">Face Swap</h3>
     <button 
       onClick={data.onFaceSwap}
@@ -133,13 +133,13 @@ const FaceSwapNode = ({ data }: { data: any }) => (
 );
 
 const CreativePromptNode = ({ data }: { data: any }) => (
-  <div className="p-4 border rounded-lg bg-white shadow-md w-[280px]">
+  <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[280px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">Creative Prompt</h3>
     <textarea
       value={data.prompt}
       onChange={(e) => data.setPrompt(e.target.value)}
       placeholder="Describe your video scene, style, and mood..."
-      className="w-full px-3 py-2 border rounded-md h-24 mb-2"
+      className="w-full px-3 py-2 border rounded-md h-24 mb-2 bg-white text-gray-900"
     />
     <button 
       onClick={data.onGenerate}
@@ -152,7 +152,7 @@ const CreativePromptNode = ({ data }: { data: any }) => (
 );
 
 const VideoResultsNode = ({ data }: { data: any }) => (
-  <div className="p-4 border rounded-lg bg-white shadow-md w-[320px]">
+  <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[320px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">Generated Videos</h3>
     <div className="grid grid-cols-2 gap-2 mb-3">
       {Object.entries(data.generatedVideos).map(([key, video]: [string, any]) => (
@@ -168,8 +168,8 @@ const VideoResultsNode = ({ data }: { data: any }) => (
               className="w-full aspect-[9/16] object-cover"
             />
           ) : (
-            <div className="w-full aspect-[9/16] bg-muted flex items-center justify-center">
-              <p className="text-xs">{video.status}</p>
+            <div className="w-full aspect-[9/16] bg-gray-200 flex items-center justify-center">
+              <p className="text-xs text-gray-700">{video.status}</p>
             </div>
           )}
           <p className="text-xs text-center mt-1">{key}</p>
@@ -187,7 +187,7 @@ const VideoResultsNode = ({ data }: { data: any }) => (
 );
 
 const FinalVideoNode = ({ data }: { data: any }) => (
-  <div className="p-4 border rounded-lg bg-white shadow-md w-[280px]">
+  <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[280px] text-gray-900">
     <h3 className="text-lg font-semibold mb-2">Final Video</h3>
     {data.finalVideoUrl ? (
       <div className="space-y-3">
@@ -205,8 +205,8 @@ const FinalVideoNode = ({ data }: { data: any }) => (
         </a>
       </div>
     ) : (
-      <div className="w-full aspect-[9/16] bg-muted flex items-center justify-center">
-        <p className="text-sm">No final video yet</p>
+      <div className="w-full aspect-[9/16] bg-gray-200 flex items-center justify-center">
+        <p className="text-sm text-gray-700">No final video yet</p>
       </div>
     )}
   </div>
@@ -290,7 +290,7 @@ export default function Home() {
           }
         }
       },
-      position: { x: 100, y: 250 },
+      position: { x: 100, y: 300 },
     },
     {
       id: '3',
@@ -304,7 +304,7 @@ export default function Home() {
           }
         }
       },
-      position: { x: 100, y: 500 },
+      position: { x: 450, y: 100 },
     },
     {
       id: '4',
@@ -342,7 +342,7 @@ export default function Home() {
           }
         }
       },
-      position: { x: 400, y: 100 },
+      position: { x: 450, y: 300 },
     },
     {
       id: '5',
@@ -386,7 +386,7 @@ export default function Home() {
           }
         }
       },
-      position: { x: 400, y: 300 },
+      position: { x: 800, y: 100 },
     },
     {
       id: '6',
@@ -427,7 +427,7 @@ export default function Home() {
           }
         }
       },
-      position: { x: 700, y: 100 },
+      position: { x: 800, y: 300 },
     },
     {
       id: '7',
@@ -435,16 +435,22 @@ export default function Home() {
       data: { 
         finalVideoUrl: store.finalVideoUrl
       },
-      position: { x: 700, y: 400 },
+      position: { x: 1150, y: 200 },
     },
   ]);
   
   const [edges, setEdges] = useState<Edge[]>([
+    // TikTok URL → Frames
     { id: 'e1-2', source: '1', target: '2' },
+    // Frames → Face Swap
     { id: 'e2-4', source: '2', target: '4' },
+    // Face Upload → Face Swap
     { id: 'e3-4', source: '3', target: '4' },
+    // Face Swap → Creative Prompt
     { id: 'e4-5', source: '4', target: '5' },
+    // Creative Prompt → Video Results
     { id: 'e5-6', source: '5', target: '6' },
+    // Video Results → Final Video
     { id: 'e6-7', source: '6', target: '7' },
   ]);
 
@@ -486,7 +492,7 @@ export default function Home() {
         nodeTypes={nodeTypes}
         fitView
       >
-        <Background />
+        <Background color="#e5e7eb" />
         <Controls />
         <MiniMap />
       </ReactFlow>
