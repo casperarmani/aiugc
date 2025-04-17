@@ -1,4 +1,4 @@
-import { getTikTokVideo } from "@prevter/tiktok-scraper";
+import { fetchVideo } from "@prevter/tiktok-scraper";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
@@ -6,7 +6,40 @@ import fs from "fs/promises";
 import os from "os";
 import { dir } from "tmp-promise";
 import ffmpegStatic from "ffmpeg-static";
-import ffprobeStatic from "ffprobe-static";
+// Import ffprobe path from the installed location directly
+// Detect OS and architecture
+const platform = process.platform;
+const arch = process.arch;
+
+// Map platform to folder name
+const platformMap: Record<string, string> = {
+  'darwin': 'darwin',
+  'win32': 'win32',
+  'linux': 'linux',
+};
+
+// Map architecture to folder name
+const archMap: Record<string, string> = {
+  'x64': 'x64',
+  'arm64': 'arm64',
+  'ia32': 'ia32',
+};
+
+// Add .exe extension for Windows
+const executableExt = platform === 'win32' ? '.exe' : '';
+const platformFolder = platformMap[platform] || 'darwin';
+const archFolder = archMap[arch] || 'x64';
+
+// Build the path
+const ffprobePath = path.join(
+  process.cwd(), 
+  'node_modules', 
+  'ffprobe-static', 
+  'bin', 
+  platformFolder, 
+  archFolder, 
+  `ffprobe${executableExt}`
+);
 
 const execFileAsync = promisify(execFile);
 
@@ -26,29 +59,39 @@ export async function downloadTikTokVideo(url: string): Promise<ExtractedFrames>
     const tempDir = await dir({ unsafeCleanup: true });
     
     // Download TikTok video
-    console.log("Calling getTikTokVideo with URL:", url);
-    const videoData = await getTikTokVideo(url);
-    console.log("TikTok video data received:", videoData.video ? "Video URL available" : "No video URL");
+    console.log("Calling fetchVideo with URL:", url);
+    const videoData = await fetchVideo(url);
+    console.log("TikTok video data received:", videoData);
     
-    if (!videoData.video) {
-      throw new Error("Failed to extract video URL from TikTok");
+    // Structure might be different from what we expected, let's check what we received
+    let videoUrl = '';
+    
+    if (videoData && videoData.download && videoData.download.url) {
+      videoUrl = videoData.download.url;
+      console.log("Video URL found:", videoUrl);
+    } else if (videoData && videoData.video) {
+      videoUrl = videoData.video;
+      console.log("Video URL found in alternate location:", videoUrl);
+    } else {
+      console.error("Video data structure:", JSON.stringify(videoData, null, 2));
+      throw new Error("Failed to extract video URL from TikTok response");
     }
     
     const videoPath = path.join(tempDir.path, "original.mp4");
-    console.log("Downloading video from:", videoData.video);
+    console.log("Downloading video from:", videoUrl);
     console.log("Saving to path:", videoPath);
     
-    const response = await fetch(videoData.video);
+    const response = await fetch(videoUrl);
     const buffer = await response.arrayBuffer();
     await fs.writeFile(videoPath, Buffer.from(buffer));
     console.log("Video downloaded and saved");
     
     // Extract video duration
-    console.log("Getting video duration using ffprobe from:", ffprobeStatic.path);
+    console.log("Getting video duration using ffprobe from:", ffprobePath);
     let duration = 10; // Default duration if we can't get it
     try {
       const { stdout: durationOutput } = await execFileAsync(
-        ffprobeStatic.path,
+        ffprobePath,
         [
           "-v", "error",
           "-show_entries", "format=duration",
