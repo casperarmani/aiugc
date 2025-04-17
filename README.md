@@ -30,7 +30,6 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
 ### Prerequisites
 
 - Node.js 20+
-- Docker (optional)
 
 ### Environment Setup
 
@@ -40,7 +39,7 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
    ```
 
 2. Fill in the required environment variables:
-   - `PIAPI_KEY`: Your PiAPI key for both face swap and Kling 2.0
+   - `PIAPI_KEY`: Your PiAPI key (used for both face swap and video generation)
    - `ADMIN_TOKEN`: A secret token for middleware route protection
 
 ### Development

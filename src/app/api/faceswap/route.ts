@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
     }
     
     // Convert images to base64
-    const sourceBuffer = Buffer.from(await sourceImage.arrayBuffer());
-    const targetBuffer = Buffer.from(await targetImage.arrayBuffer());
+    const sourceBuffer = Buffer.from(await sourceImage.arrayBuffer()); // Face to swap in
+    const targetBuffer = Buffer.from(await targetImage.arrayBuffer()); // Frame to swap onto
     
     const sourceBase64 = sourceBuffer.toString("base64");
     const targetBase64 = targetBuffer.toString("base64");
@@ -82,13 +82,7 @@ export async function POST(request: NextRequest) {
           throw new Error("Face swap failed");
         }
         
-        // If rate limited, wait longer
-        if (result.status === 429) {
-          console.log("Rate limited during polling. Waiting 10s...");
-          await delay(10000);
-          attempts--; // Don't count this as an attempt
-          continue;
-        }
+        // PiAPI only returns QUEUED/RUNNING/FAILED/COMPLETED status codes
         
         // Otherwise continue polling
         console.log(`Face swap status: ${result.status}, attempt ${attempts}/${maxAttempts}`);
@@ -111,7 +105,6 @@ export async function POST(request: NextRequest) {
     
     // If we've reached max attempts without success
     throw new Error("Face swap timed out after multiple attempts");
-    
   } catch (error: any) {
     console.error("Error in faceswap route:", error);
     return NextResponse.json(

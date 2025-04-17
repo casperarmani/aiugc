@@ -6,7 +6,6 @@ services:
     ports: [3000:3000]
     environment:
       - PIAPI_KEY
-      - KLING_PROVIDER=piapi
       - ADMIN_TOKEN
     volumes:
       - ./:/app
