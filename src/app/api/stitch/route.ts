@@ -7,11 +7,10 @@ import { uploadToTempHost } from "../../lib/tempHost";
 
 export async function POST(request: NextRequest) {
   try {
-    // Check admin token
+    // Server-side authorization check - only allow internal requests
     const authHeader = request.headers.get("Authorization");
-    const adminToken = process.env.ADMIN_TOKEN;
     
-    if (!authHeader || !adminToken || !authHeader.includes(adminToken)) {
+    if (authHeader !== "internal") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     

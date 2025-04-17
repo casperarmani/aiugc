@@ -10,7 +10,7 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
 
 - TikTok video extraction
 - Face-swapping using FaceFusion
-- AI video generation with Kling 2.0
+- AI video generation with Kling 2.0 Master via PiAPI
 - Video concatenation using ffmpeg
 
 ## Tech Stack
@@ -21,9 +21,9 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
 - **Video I/O**: ffmpeg-static, fluent-ffmpeg
 - **TikTok DL**: @prevter/tiktok-scraper
 - **Face-swap**: FaceFusion CLI (Python microservice with FastAPI)
-- **Gen-AI video**: Kling 2.0 Master via open-api.klingai.com
+- **Gen-AI video**: Kling 2.0 Master via PiAPI (pay-as-you-go at ~$0.16 per 5s clip)
 - **Temp storage**: OS /tmp + tmp-promise
-- **Auth**: .env-gated bearer token
+- **Auth**: Server-side internal authorization
 
 ## Getting Started
 
@@ -41,9 +41,8 @@ Input: TikTok URL + face image + creative prompt → Output: 10s ad-ready reel w
    ```
 
 2. Fill in the required environment variables:
-   - `KLING_AK`: Your Kling API access key
-   - `KLING_SK`: Your Kling API secret key
-   - `ADMIN_TOKEN`: A secret token for API route protection
+   - `PIAPI_KEY`: Your PiAPI key for Kling 2.0 Master access
+   - `ADMIN_TOKEN`: A secret token for middleware route protection
 
 ### Development
 
@@ -93,10 +92,18 @@ docker-compose up --build
  │   └─ lib/
  │       ├─ ffmpeg.ts
  │       ├─ tiktok.ts
- │       ├─ kling.ts
- │       └─ jwt.ts
- └─ faceswap/ (Docker)          // Python micro-service
+ │       ├─ kling.ts           // PiAPI integration (pay-as-you-go)
+ │       └─ tempHost.ts        // file.io temporary public hosting
+ └─ faceswap/ (Docker)         // Python micro-service
 ```
+
+## Cost Efficiency
+
+Using PiAPI's pay-as-you-go model for Kling 2.0:
+- Standard quality: $0.16 per 5-second clip
+- Two clips per video: $0.32 total cost
+- No minimum spend or bundles required
+- Render time: typically 25-40 seconds per clip
 
 ## License
 

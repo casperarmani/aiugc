@@ -5,8 +5,8 @@ services:
     build: .
     ports: [3000:3000]
     environment:
-      - KLING_AK
-      - KLING_SK
+      - PIAPI_KEY
+      - KLING_PROVIDER
       - ADMIN_TOKEN
       - FACESWAP_SERVICE_URL=http://faceswap:8000
     volumes:

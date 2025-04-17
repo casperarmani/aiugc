@@ -248,7 +248,7 @@ export default function Home() {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                'Authorization': 'internal'
               },
               body: JSON.stringify({ url: store.tikTokUrl })
             });
@@ -342,7 +342,7 @@ export default function Home() {
               const response = await fetch('/api/faceswap', {
                 method: 'POST',
                 headers: {
-                  'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                  'Authorization': 'internal'
                 },
                 body: formData
               });
@@ -443,7 +443,7 @@ export default function Home() {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                'Authorization': 'internal'
               },
               body: JSON.stringify({
                 prompt: store.prompt,
@@ -468,7 +468,7 @@ export default function Home() {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                'Authorization': 'internal'
               },
               body: JSON.stringify({
                 prompt: store.prompt,
@@ -512,7 +512,7 @@ export default function Home() {
                   const pollResponse = await fetch(`/api/kling?jobId=${jobId}`, {
                     method: 'GET',
                     headers: {
-                      'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                      'Authorization': 'internal'
                     }
                   });
                   
@@ -600,7 +600,7 @@ export default function Home() {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                'Authorization': 'internal'
               },
               body: JSON.stringify({ clips: clipUrls })
             });

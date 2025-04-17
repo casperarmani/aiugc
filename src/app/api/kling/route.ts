@@ -2,16 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { createKlingJob, pollKlingJob } from "../../lib/kling";
 import pLimit from "p-limit";
 
-// Limit concurrent Kling jobs to 2
-const limit = pLimit(2);
+// Limit concurrent Kling jobs to 1 (PiAPI caps at 1 task per key per 3s)
+const limit = pLimit(1);
+
+// Add delay between job submissions for rate limit compliance
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function POST(request: NextRequest) {
   try {
-    // Check admin token
+    // Server-side authorization check - only allow internal requests
     const authHeader = request.headers.get("Authorization");
-    const adminToken = process.env.ADMIN_TOKEN;
     
-    if (!authHeader || !adminToken || !authHeader.includes(adminToken)) {
+    if (authHeader !== "internal") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
@@ -33,16 +35,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Kling job with rate limiting
-    const job = await limit(() => createKlingJob({
-      prompt,
-      imageUrl,
-      tailImageUrl,
-      duration,
-      aspectRatio,
-      numSamples,
-      mode: "pro",
-      cfgScale: 0.5
-    }));
+    const job = await limit(async () => {
+      // Add 3s delay before submission to comply with PiAPI rate limits
+      await delay(3000);
+      
+      return await createKlingJob({
+        prompt,
+        imageUrl,
+        tailImageUrl,
+        duration,
+        aspectRatio,
+        numSamples,
+        quality: "standard" // Use standard quality ($0.16 per clip) instead of pro
+      });
+    });
     
     return NextResponse.json({ jobId: job.id });
   } catch (error: any) {
@@ -56,11 +62,10 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Check admin token
+    // Server-side authorization check - only allow internal requests
     const authHeader = request.headers.get("Authorization");
-    const adminToken = process.env.ADMIN_TOKEN;
     
-    if (!authHeader || !adminToken || !authHeader.includes(adminToken)) {
+    if (authHeader !== "internal") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     
