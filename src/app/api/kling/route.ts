@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createKlingJob, pollKlingJob } from "../../lib/kling";
 import pLimit from "p-limit";
 
+export const runtime = 'nodejs';
+
 // Limit concurrent Kling jobs to 1 (PiAPI caps at 1 task per key per 3s)
 const limit = pLimit(1);
 

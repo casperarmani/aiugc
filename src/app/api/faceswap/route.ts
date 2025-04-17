@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createFaceSwap, fetchFaceSwap } from "../../lib/faceswap";
 import pLimit from "p-limit";
 
+export const runtime = 'nodejs';
+
 // Limit concurrent face swap requests to 3 (PiAPI allows ~3 qps per key)
 const limiter = pLimit(3);
 

@@ -5,6 +5,8 @@ import { dir } from "tmp-promise";
 import path from "path";
 import { uploadToTempHost } from "../../lib/tempHost";
 
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
     // Server-side authorization check - only allow internal requests

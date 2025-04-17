@@ -3,6 +3,8 @@ import { downloadTikTokVideo } from "../../lib/tiktok";
 import fs from "fs/promises";
 import path from "path";
 
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
     // Server-side authorization check - only allow internal requests
@@ -13,17 +15,23 @@ export async function POST(request: NextRequest) {
     }
     
     // Parse request body
-    const { url } = await request.json();
+    const requestData = await request.json();
+    console.log("Request received in extract API:", requestData);
+    const { url } = requestData;
     
     if (!url) {
+      console.log("Error: Missing TikTok URL in request");
       return NextResponse.json(
         { error: "Missing TikTok URL" },
         { status: 400 }
       );
     }
+    console.log("Processing TikTok URL:", url);
 
     // Download TikTok video and extract frames
+    console.log("Starting downloadTikTokVideo...");
     const extractedFrames = await downloadTikTokVideo(url);
+    console.log("Successfully extracted frames");
     
     // Convert frames to base64 for response
     const startFrame = await fs.readFile(extractedFrames.frames.start);
@@ -55,4 +63,9 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function GET() {
+  return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+}
 }

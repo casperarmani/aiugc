@@ -16,6 +16,364 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useStore } from "./store";
 
+// Helper functions that access store state at execution time
+export async function extractFrames() {
+  const {
+    tikTokUrl,
+    setError,
+    setIsLoading,
+    setExtractedData,
+  } = useStore.getState();
+
+  console.log("Extract frames clicked with URL:", tikTokUrl);
+  
+  if (!tikTokUrl || tikTokUrl.trim() === '') {
+    setError("Please enter a TikTok URL");
+    return;
+  }
+  
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    console.log("Making API request with URL:", tikTokUrl);
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'internal'
+      },
+      body: JSON.stringify({ url: tikTokUrl })
+    });
+    console.log("API response status:", response.status);
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to extract frames');
+    }
+    
+    // Parse the response
+    const data = await response.json();
+    
+    // Update the store with extracted data
+    setExtractedData({
+      tempDir: data.tempDir,
+      videoPath: data.videoPath,
+      frames: data.frames
+    });
+  } catch (error: any) {
+    setError(error.message || "Failed to extract frames");
+  } finally {
+    setIsLoading(false);
+  }
+}
+
+export async function handleFaceSwap() {
+  const {
+    faceImage,
+    selectedFrames,
+    frames,
+    setIsLoading,
+    setError,
+    setSwappedFrame
+  } = useStore.getState();
+
+  if (!faceImage || selectedFrames.length === 0) {
+    setError("Please upload a face image and select frames");
+    return;
+  }
+  
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    // Process each selected frame concurrently
+    const swapPromises = selectedFrames.map(async (key) => {
+      // Create FormData for the API request
+      const formData = new FormData();
+      formData.append('sourceImage', faceImage as File);
+      
+      // Get the target frame
+      const targetImagePath = frames![key].path;
+      
+      // Fetch the image from the path and convert to a file object
+      const targetImageResponse = await fetch(frames![key].base64);
+      const targetImageBlob = await targetImageResponse.blob();
+      const targetFile = new File([targetImageBlob], `target_${key}.png`, { type: 'image/png' });
+      formData.append('targetImage', targetFile);
+      
+      // Call faceswap API
+      const response = await fetch('/api/faceswap', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'internal'
+        },
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to swap face for ${key} frame`);
+      }
+      
+      // Parse the response
+      const data = await response.json();
+      
+      // Update the store with the swapped frame
+      setSwappedFrame(key, {
+        path: data.swappedImagePath,
+        base64: data.base64
+      });
+      
+      return key;
+    });
+    
+    // Wait for all swaps to complete
+    await Promise.all(swapPromises);
+    
+  } catch (error: any) {
+    setError(error.message || "Failed to swap faces");
+  } finally {
+    setIsLoading(false);
+  }
+}
+
+export async function handleGenerate() {
+  const {
+    swappedFrames,
+    prompt,
+    setError,
+    setIsLoading,
+    setGeneratedVideo
+  } = useStore.getState();
+
+  if (Object.keys(swappedFrames).length === 0 || !prompt) {
+    setError("Please swap faces and enter a creative prompt");
+    return;
+  }
+  
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    // We'll need to upload the swapped frames to get public URLs for Kling
+    // For this local MVP, we'll use the tempHost service
+    
+    // Upload the swapped frames to the temporary file host
+    // This would ideally be done server-side, but for the MVP we'll upload from client
+    // using the base64 data we already have in the store
+    const startFrame = swappedFrames['start'];
+    const middleFrame = swappedFrames['middle'];
+    const endFrame = swappedFrames['end'];
+    
+    if (!startFrame || !middleFrame || !endFrame) {
+      throw new Error("Missing one or more swapped frames. Please swap all three frames.");
+    }
+    
+    // Create temporary image files from base64 data
+    const uploadFrame = async (base64Data: string, name: string) => {
+      // Convert base64 to blob
+      const response = await fetch(base64Data);
+      const blob = await response.blob();
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('file', blob, `${name}.png`);
+      
+      // Upload to temporary host service (file.io)
+      const uploadResponse = await fetch('https://file.io', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error(`Failed to upload ${name} frame`);
+      }
+      
+      const result = await uploadResponse.json();
+      return result.link;
+    };
+    
+    // Upload all three frames
+    const startFrameUrl = await uploadFrame(startFrame.base64, 'start');
+    const middleFrameUrl = await uploadFrame(middleFrame.base64, 'middle');
+    const endFrameUrl = await uploadFrame(endFrame.base64, 'end');
+    
+    // Create two Kling jobs: start->middle and middle->end
+    // Clip 1: start -> middle
+    const clip1Response = await fetch('/api/kling', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'internal'
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        imageUrl: startFrameUrl,
+        tailImageUrl: middleFrameUrl,
+        duration: 5,
+        aspectRatio: '9:16',
+        numSamples: 2
+      })
+    });
+    
+    if (!clip1Response.ok) {
+      const errorData = await clip1Response.json();
+      throw new Error(errorData.error || 'Failed to create first clip job');
+    }
+    
+    const clip1Data = await clip1Response.json();
+    const jobId1 = clip1Data.jobId;
+    
+    // Clip 2: middle -> end
+    const clip2Response = await fetch('/api/kling', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'internal'
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        imageUrl: middleFrameUrl,
+        tailImageUrl: endFrameUrl,
+        duration: 5,
+        aspectRatio: '9:16',
+        numSamples: 2
+      })
+    });
+    
+    if (!clip2Response.ok) {
+      const errorData = await clip2Response.json();
+      throw new Error(errorData.error || 'Failed to create second clip job');
+    }
+    
+    const clip2Data = await clip2Response.json();
+    const jobId2 = clip2Data.jobId;
+    
+    // Update store with job IDs and pending status
+    setGeneratedVideo('clip1', {
+      jobId: jobId1,
+      status: 'pending'
+    });
+    
+    setGeneratedVideo('clip2', {
+      jobId: jobId2,
+      status: 'pending'
+    });
+    
+    // Start polling for job status
+    const poll = async (clipKey: string, jobId: string) => {
+      const maxAttempts = 30; // Maximum polling attempts (30 * 5s = 150s = 2.5 minutes)
+      let attempts = 0;
+      
+      const pollInterval = setInterval(async () => {
+        try {
+          attempts++;
+          
+          // Poll the job status
+          const pollResponse = await fetch(`/api/kling?jobId=${jobId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': 'internal'
+            }
+          });
+          
+          if (!pollResponse.ok) {
+            clearInterval(pollInterval);
+            const errorData = await pollResponse.json();
+            throw new Error(errorData.error || `Failed to poll ${clipKey} job status`);
+          }
+          
+          const jobData = await pollResponse.json();
+          
+          // Update store with current status
+          setGeneratedVideo(clipKey, {
+            jobId,
+            status: jobData.status,
+            videos: jobData.videos
+          });
+          
+          // If job is completed or failed, or we've reached max attempts, stop polling
+          if (jobData.status === 'completed' || jobData.status === 'failed' || attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            if (attempts >= maxAttempts && jobData.status !== 'completed') {
+              setError(`${clipKey} job timed out`);
+            }
+          }
+        } catch (error: any) {
+          clearInterval(pollInterval);
+          console.error(`Error polling ${clipKey} job:`, error);
+          setError(error.message || `Failed to poll ${clipKey} job`);
+        }
+      }, 5000); // Poll every 5 seconds
+    };
+    
+    // Start polling for both jobs
+    poll('clip1', jobId1);
+    poll('clip2', jobId2);
+    
+  } catch (error: any) {
+    setError(error.message || "Failed to generate videos");
+    setIsLoading(false);
+  }
+  // Note: We don't set isLoading to false here because the polling will continue
+  // Each component should check its own loading state based on job status
+}
+
+export async function handleStitch() {
+  const {
+    selectedVideos,
+    generatedVideos,
+    setIsLoading,
+    setError,
+    setFinalVideoUrl
+  } = useStore.getState();
+
+  if (selectedVideos.length === 0) {
+    setError("Please select videos to stitch");
+    return;
+  }
+  
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    // Get URLs of selected generated videos
+    const clipUrls = selectedVideos.map(key => {
+      const video = generatedVideos[key];
+      if (!video || !video.videos || video.videos.length === 0) {
+        throw new Error(`No video URL available for ${key}`);
+      }
+      // Use the first video from each clip (index 0)
+      return video.videos[0];
+    });
+    
+    // Call the stitch API
+    const response = await fetch('/api/stitch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'internal'
+      },
+      body: JSON.stringify({ clips: clipUrls })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to stitch videos');
+    }
+    
+    // Get the final video URL from the response
+    const data = await response.json();
+    setFinalVideoUrl(data.finalVideoUrl);
+    
+  } catch (error: any) {
+    setError(error.message || "Failed to stitch videos");
+  } finally {
+    setIsLoading(false);
+  }
+}
+
 // Custom node components
 const TikTokNode = ({ data }: { data: any }) => (
   <div className="p-4 border rounded-lg bg-gray-100 shadow-md w-[280px] text-gray-900">
@@ -236,49 +594,7 @@ export default function Home() {
         tikTokUrl: store.tikTokUrl, 
         setTikTokUrl: store.setTikTokUrl,
         isLoading: store.isLoading,
-        onExtract: async () => {
-          // For debugging
-          console.log("Extract button clicked, tikTokUrl:", store.tikTokUrl);
-          
-          if (!store.tikTokUrl || store.tikTokUrl.trim() === '') {
-            store.setError("Please enter a TikTok URL");
-            return;
-          }
-          
-          store.setIsLoading(true);
-          store.setError(null);
-          
-          try {
-            // Call the extract API endpoint
-            const response = await fetch('/api/extract', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'internal'
-              },
-              body: JSON.stringify({ url: store.tikTokUrl })
-            });
-            
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || 'Failed to extract frames');
-            }
-            
-            // Parse the response
-            const data = await response.json();
-            
-            // Update the store with extracted data
-            store.setExtractedData({
-              tempDir: data.tempDir,
-              videoPath: data.videoPath,
-              frames: data.frames
-            });
-          } catch (error: any) {
-            store.setError(error.message || "Failed to extract frames");
-          } finally {
-            store.setIsLoading(false);
-          }
-        }
+        onExtract: extractFrames
       },
       position: { x: 100, y: 100 },
     },
@@ -319,66 +635,7 @@ export default function Home() {
         isLoading: store.isLoading,
         canSwap: store.faceImage !== null && store.selectedFrames.length > 0,
         swappedFrames: store.swappedFrames,
-        onFaceSwap: async () => {
-          if (!store.faceImage || store.selectedFrames.length === 0) {
-            store.setError("Please upload a face image and select frames");
-            return;
-          }
-          
-          store.setIsLoading(true);
-          store.setError(null);
-          
-          try {
-            // Process each selected frame concurrently
-            const swapPromises = store.selectedFrames.map(async (key) => {
-              // Create FormData for the API request
-              const formData = new FormData();
-              formData.append('sourceImage', store.faceImage as File);
-              
-              // Get the target frame
-              const targetImagePath = store.frames![key].path;
-              
-              // Fetch the image from the path and convert to a file object
-              const targetImageResponse = await fetch(store.frames![key].base64);
-              const targetImageBlob = await targetImageResponse.blob();
-              const targetFile = new File([targetImageBlob], `target_${key}.png`, { type: 'image/png' });
-              formData.append('targetImage', targetFile);
-              
-              // Call faceswap API
-              const response = await fetch('/api/faceswap', {
-                method: 'POST',
-                headers: {
-                  'Authorization': 'internal'
-                },
-                body: formData
-              });
-              
-              if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Failed to swap face for ${key} frame`);
-              }
-              
-              // Parse the response
-              const data = await response.json();
-              
-              // Update the store with the swapped frame
-              store.setSwappedFrame(key, {
-                path: data.swappedImagePath,
-                base64: data.base64
-              });
-              
-              return key;
-            });
-            
-            // Wait for all swaps to complete
-            await Promise.all(swapPromises);
-            
-          } catch (error: any) {
-            store.setError(error.message || "Failed to swap faces");
-          } finally {
-            store.setIsLoading(false);
-          }
-        }
+        onFaceSwap: handleFaceSwap
       },
       position: { x: 450, y: 300 },
     },
@@ -390,179 +647,7 @@ export default function Home() {
         setPrompt: store.setPrompt,
         isLoading: store.isLoading,
         canGenerate: Object.keys(store.swappedFrames).length > 0 && store.prompt.length > 0,
-        onGenerate: async () => {
-          if (Object.keys(store.swappedFrames).length === 0 || !store.prompt) {
-            store.setError("Please swap faces and enter a creative prompt");
-            return;
-          }
-          
-          store.setIsLoading(true);
-          store.setError(null);
-          
-          try {
-            // We'll need to upload the swapped frames to get public URLs for Kling
-            // For this local MVP, we'll use the tempHost service
-            
-            // Upload the swapped frames to the temporary file host
-            // This would ideally be done server-side, but for the MVP we'll upload from client
-            // using the base64 data we already have in the store
-            const startFrame = store.swappedFrames['start'];
-            const middleFrame = store.swappedFrames['middle'];
-            const endFrame = store.swappedFrames['end'];
-            
-            if (!startFrame || !middleFrame || !endFrame) {
-              throw new Error("Missing one or more swapped frames. Please swap all three frames.");
-            }
-            
-            // Create temporary image files from base64 data
-            const uploadFrame = async (base64Data: string, name: string) => {
-              // Convert base64 to blob
-              const response = await fetch(base64Data);
-              const blob = await response.blob();
-              
-              // Create form data
-              const formData = new FormData();
-              formData.append('file', blob, `${name}.png`);
-              
-              // Upload to temporary host service (file.io)
-              const uploadResponse = await fetch('https://file.io', {
-                method: 'POST',
-                body: formData
-              });
-              
-              if (!uploadResponse.ok) {
-                throw new Error(`Failed to upload ${name} frame`);
-              }
-              
-              const result = await uploadResponse.json();
-              return result.link;
-            };
-            
-            // Upload all three frames
-            const startFrameUrl = await uploadFrame(startFrame.base64, 'start');
-            const middleFrameUrl = await uploadFrame(middleFrame.base64, 'middle');
-            const endFrameUrl = await uploadFrame(endFrame.base64, 'end');
-            
-            // Create two Kling jobs: start->middle and middle->end
-            // Clip 1: start -> middle
-            const clip1Response = await fetch('/api/kling', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'internal'
-              },
-              body: JSON.stringify({
-                prompt: store.prompt,
-                imageUrl: startFrameUrl,
-                tailImageUrl: middleFrameUrl,
-                duration: 5,
-                aspectRatio: '9:16',
-                numSamples: 2
-              })
-            });
-            
-            if (!clip1Response.ok) {
-              const errorData = await clip1Response.json();
-              throw new Error(errorData.error || 'Failed to create first clip job');
-            }
-            
-            const clip1Data = await clip1Response.json();
-            const jobId1 = clip1Data.jobId;
-            
-            // Clip 2: middle -> end
-            const clip2Response = await fetch('/api/kling', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'internal'
-              },
-              body: JSON.stringify({
-                prompt: store.prompt,
-                imageUrl: middleFrameUrl,
-                tailImageUrl: endFrameUrl,
-                duration: 5,
-                aspectRatio: '9:16',
-                numSamples: 2
-              })
-            });
-            
-            if (!clip2Response.ok) {
-              const errorData = await clip2Response.json();
-              throw new Error(errorData.error || 'Failed to create second clip job');
-            }
-            
-            const clip2Data = await clip2Response.json();
-            const jobId2 = clip2Data.jobId;
-            
-            // Update store with job IDs and pending status
-            store.setGeneratedVideo('clip1', {
-              jobId: jobId1,
-              status: 'pending'
-            });
-            
-            store.setGeneratedVideo('clip2', {
-              jobId: jobId2,
-              status: 'pending'
-            });
-            
-            // Start polling for job status
-            const poll = async (clipKey: string, jobId: string) => {
-              const maxAttempts = 30; // Maximum polling attempts (30 * 5s = 150s = 2.5 minutes)
-              let attempts = 0;
-              
-              const pollInterval = setInterval(async () => {
-                try {
-                  attempts++;
-                  
-                  // Poll the job status
-                  const pollResponse = await fetch(`/api/kling?jobId=${jobId}`, {
-                    method: 'GET',
-                    headers: {
-                      'Authorization': 'internal'
-                    }
-                  });
-                  
-                  if (!pollResponse.ok) {
-                    clearInterval(pollInterval);
-                    const errorData = await pollResponse.json();
-                    throw new Error(errorData.error || `Failed to poll ${clipKey} job status`);
-                  }
-                  
-                  const jobData = await pollResponse.json();
-                  
-                  // Update store with current status
-                  store.setGeneratedVideo(clipKey, {
-                    jobId,
-                    status: jobData.status,
-                    videos: jobData.videos
-                  });
-                  
-                  // If job is completed or failed, or we've reached max attempts, stop polling
-                  if (jobData.status === 'completed' || jobData.status === 'failed' || attempts >= maxAttempts) {
-                    clearInterval(pollInterval);
-                    if (attempts >= maxAttempts && jobData.status !== 'completed') {
-                      store.setError(`${clipKey} job timed out`);
-                    }
-                  }
-                } catch (error: any) {
-                  clearInterval(pollInterval);
-                  console.error(`Error polling ${clipKey} job:`, error);
-                  store.setError(error.message || `Failed to poll ${clipKey} job`);
-                }
-              }, 5000); // Poll every 5 seconds
-            };
-            
-            // Start polling for both jobs
-            poll('clip1', jobId1);
-            poll('clip2', jobId2);
-            
-          } catch (error: any) {
-            store.setError(error.message || "Failed to generate videos");
-            store.setIsLoading(false);
-          }
-          // Note: We don't set isLoading to false here because the polling will continue
-          // Each component should check its own loading state based on job status
-        }
+        onGenerate: handleGenerate
       },
       position: { x: 800, y: 100 },
     },
@@ -581,51 +666,7 @@ export default function Home() {
             store.selectVideo(key);
           }
         },
-        onStitch: async () => {
-          if (store.selectedVideos.length === 0) {
-            store.setError("Please select videos to stitch");
-            return;
-          }
-          
-          store.setIsLoading(true);
-          store.setError(null);
-          
-          try {
-            // Get URLs of selected generated videos
-            const clipUrls = store.selectedVideos.map(key => {
-              const video = store.generatedVideos[key];
-              if (!video || !video.videos || video.videos.length === 0) {
-                throw new Error(`No video URL available for ${key}`);
-              }
-              // Use the first video from each clip (index 0)
-              return video.videos[0];
-            });
-            
-            // Call the stitch API
-            const response = await fetch('/api/stitch', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'internal'
-              },
-              body: JSON.stringify({ clips: clipUrls })
-            });
-            
-            if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || 'Failed to stitch videos');
-            }
-            
-            // Get the final video URL from the response
-            const data = await response.json();
-            store.setFinalVideoUrl(data.finalVideoUrl);
-            
-          } catch (error: any) {
-            store.setError(error.message || "Failed to stitch videos");
-          } finally {
-            store.setIsLoading(false);
-          }
-        }
+        onStitch: handleStitch
       },
       position: { x: 800, y: 300 },
     },
@@ -681,7 +722,7 @@ export default function Home() {
               tikTokUrl: store.tikTokUrl,
               setTikTokUrl: store.setTikTokUrl,
               isLoading: store.isLoading,
-              onExtract: node.data.onExtract // Preserve the original handler
+              onExtract: extractFrames // Always use the stable reference
             }
           };
         }
@@ -715,7 +756,7 @@ export default function Home() {
               isLoading: store.isLoading,
               canSwap: store.faceImage !== null && store.selectedFrames.length > 0,
               swappedFrames: store.swappedFrames,
-              onFaceSwap: node.data.onFaceSwap
+              onFaceSwap: handleFaceSwap
             }
           };
         }
@@ -728,7 +769,7 @@ export default function Home() {
               setPrompt: store.setPrompt,
               isLoading: store.isLoading,
               canGenerate: Object.keys(store.swappedFrames).length > 0 && store.prompt.length > 0,
-              onGenerate: node.data.onGenerate
+              onGenerate: handleGenerate
             }
           };
         }
@@ -742,7 +783,7 @@ export default function Home() {
               isLoading: store.isLoading,
               canStitch: store.selectedVideos.length > 0,
               onSelectVideo: node.data.onSelectVideo,
-              onStitch: node.data.onStitch
+              onStitch: handleStitch
             }
           };
         }

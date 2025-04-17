@@ -1,12 +1,16 @@
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "ffprobe-static";
 import path from "path";
 import fs from "fs/promises";
 import { dir } from "tmp-promise";
 
 // Configure ffmpeg to use static binary
 if (ffmpegStatic) {
-  ffmpeg.setFfmpegPath(ffmpegStatic);
+  ffmpeg.setFfmpegPath(ffmpegStatic as string);
+}
+if (ffprobeStatic.path) {
+  ffmpeg.setFfprobePath(ffprobeStatic.path);
 }
 
 export interface StitchOptions {
