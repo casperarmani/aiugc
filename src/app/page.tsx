@@ -243,29 +243,29 @@ export default function Home() {
           store.setError(null);
           
           try {
-            // Placeholder for API call - will implement full functionality
-            console.log("Extracting frames from:", store.tikTokUrl);
-            // Simulate API delay for now
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Call the extract API endpoint
+            const response = await fetch('/api/extract', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+              },
+              body: JSON.stringify({ url: store.tikTokUrl })
+            });
             
-            // For demo, create mock frames data
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to extract frames');
+            }
+            
+            // Parse the response
+            const data = await response.json();
+            
+            // Update the store with extracted data
             store.setExtractedData({
-              tempDir: '/tmp/demo',
-              videoPath: '/tmp/demo/video.mp4',
-              frames: {
-                start: {
-                  path: '/tmp/demo/start.png',
-                  base64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-                },
-                middle: {
-                  path: '/tmp/demo/middle.png',
-                  base64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-                },
-                end: {
-                  path: '/tmp/demo/end.png',
-                  base64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
-                }
-              }
+              tempDir: data.tempDir,
+              videoPath: data.videoPath,
+              frames: data.frames
             });
           } catch (error: any) {
             store.setError(error.message || "Failed to extract frames");
@@ -323,18 +323,50 @@ export default function Home() {
           store.setError(null);
           
           try {
-            // Placeholder for API call - will implement full functionality
-            console.log("Swapping faces on:", store.selectedFrames);
-            // Simulate API delay for now
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // For demo, create mock swapped frames
-            for (const key of store.selectedFrames) {
-              store.setSwappedFrame(key, {
-                path: `/tmp/demo/swapped_${key}.png`,
-                base64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            // Process each selected frame concurrently
+            const swapPromises = store.selectedFrames.map(async (key) => {
+              // Create FormData for the API request
+              const formData = new FormData();
+              formData.append('sourceImage', store.faceImage as File);
+              
+              // Get the target frame
+              const targetImagePath = store.frames![key].path;
+              
+              // Fetch the image from the path and convert to a file object
+              const targetImageResponse = await fetch(store.frames![key].base64);
+              const targetImageBlob = await targetImageResponse.blob();
+              const targetFile = new File([targetImageBlob], `target_${key}.png`, { type: 'image/png' });
+              formData.append('targetImage', targetFile);
+              
+              // Call faceswap API
+              const response = await fetch('/api/faceswap', {
+                method: 'POST',
+                headers: {
+                  'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                },
+                body: formData
               });
-            }
+              
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Failed to swap face for ${key} frame`);
+              }
+              
+              // Parse the response
+              const data = await response.json();
+              
+              // Update the store with the swapped frame
+              store.setSwappedFrame(key, {
+                path: data.swappedImagePath,
+                base64: data.base64
+              });
+              
+              return key;
+            });
+            
+            // Wait for all swaps to complete
+            await Promise.all(swapPromises);
+            
           } catch (error: any) {
             store.setError(error.message || "Failed to swap faces");
           } finally {
@@ -362,28 +394,168 @@ export default function Home() {
           store.setError(null);
           
           try {
-            // Placeholder for API call - will implement full functionality
-            console.log("Generating videos with prompt:", store.prompt);
-            // Simulate API delay for now
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // We'll need to upload the swapped frames to get public URLs for Kling
+            // For this local MVP, we'll use the tempHost service
             
-            // For demo, create mock generated videos
+            // Upload the swapped frames to the temporary file host
+            // This would ideally be done server-side, but for the MVP we'll upload from client
+            // using the base64 data we already have in the store
+            const startFrame = store.swappedFrames['start'];
+            const middleFrame = store.swappedFrames['middle'];
+            const endFrame = store.swappedFrames['end'];
+            
+            if (!startFrame || !middleFrame || !endFrame) {
+              throw new Error("Missing one or more swapped frames. Please swap all three frames.");
+            }
+            
+            // Create temporary image files from base64 data
+            const uploadFrame = async (base64Data: string, name: string) => {
+              // Convert base64 to blob
+              const response = await fetch(base64Data);
+              const blob = await response.blob();
+              
+              // Create form data
+              const formData = new FormData();
+              formData.append('file', blob, `${name}.png`);
+              
+              // Upload to temporary host service (file.io)
+              const uploadResponse = await fetch('https://file.io', {
+                method: 'POST',
+                body: formData
+              });
+              
+              if (!uploadResponse.ok) {
+                throw new Error(`Failed to upload ${name} frame`);
+              }
+              
+              const result = await uploadResponse.json();
+              return result.link;
+            };
+            
+            // Upload all three frames
+            const startFrameUrl = await uploadFrame(startFrame.base64, 'start');
+            const middleFrameUrl = await uploadFrame(middleFrame.base64, 'middle');
+            const endFrameUrl = await uploadFrame(endFrame.base64, 'end');
+            
+            // Create two Kling jobs: start->middle and middle->end
+            // Clip 1: start -> middle
+            const clip1Response = await fetch('/api/kling', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+              },
+              body: JSON.stringify({
+                prompt: store.prompt,
+                imageUrl: startFrameUrl,
+                tailImageUrl: middleFrameUrl,
+                duration: 5,
+                aspectRatio: '9:16',
+                numSamples: 2
+              })
+            });
+            
+            if (!clip1Response.ok) {
+              const errorData = await clip1Response.json();
+              throw new Error(errorData.error || 'Failed to create first clip job');
+            }
+            
+            const clip1Data = await clip1Response.json();
+            const jobId1 = clip1Data.jobId;
+            
+            // Clip 2: middle -> end
+            const clip2Response = await fetch('/api/kling', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+              },
+              body: JSON.stringify({
+                prompt: store.prompt,
+                imageUrl: middleFrameUrl,
+                tailImageUrl: endFrameUrl,
+                duration: 5,
+                aspectRatio: '9:16',
+                numSamples: 2
+              })
+            });
+            
+            if (!clip2Response.ok) {
+              const errorData = await clip2Response.json();
+              throw new Error(errorData.error || 'Failed to create second clip job');
+            }
+            
+            const clip2Data = await clip2Response.json();
+            const jobId2 = clip2Data.jobId;
+            
+            // Update store with job IDs and pending status
             store.setGeneratedVideo('clip1', {
-              jobId: 'job1',
-              status: 'completed',
-              videos: ['https://example.com/video1.mp4']
+              jobId: jobId1,
+              status: 'pending'
             });
             
             store.setGeneratedVideo('clip2', {
-              jobId: 'job2',
-              status: 'completed',
-              videos: ['https://example.com/video2.mp4']
+              jobId: jobId2,
+              status: 'pending'
             });
+            
+            // Start polling for job status
+            const poll = async (clipKey: string, jobId: string) => {
+              const maxAttempts = 30; // Maximum polling attempts (30 * 5s = 150s = 2.5 minutes)
+              let attempts = 0;
+              
+              const pollInterval = setInterval(async () => {
+                try {
+                  attempts++;
+                  
+                  // Poll the job status
+                  const pollResponse = await fetch(`/api/kling?jobId=${jobId}`, {
+                    method: 'GET',
+                    headers: {
+                      'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+                    }
+                  });
+                  
+                  if (!pollResponse.ok) {
+                    clearInterval(pollInterval);
+                    const errorData = await pollResponse.json();
+                    throw new Error(errorData.error || `Failed to poll ${clipKey} job status`);
+                  }
+                  
+                  const jobData = await pollResponse.json();
+                  
+                  // Update store with current status
+                  store.setGeneratedVideo(clipKey, {
+                    jobId,
+                    status: jobData.status,
+                    videos: jobData.videos
+                  });
+                  
+                  // If job is completed or failed, or we've reached max attempts, stop polling
+                  if (jobData.status === 'completed' || jobData.status === 'failed' || attempts >= maxAttempts) {
+                    clearInterval(pollInterval);
+                    if (attempts >= maxAttempts && jobData.status !== 'completed') {
+                      store.setError(`${clipKey} job timed out`);
+                    }
+                  }
+                } catch (error: any) {
+                  clearInterval(pollInterval);
+                  console.error(`Error polling ${clipKey} job:`, error);
+                  store.setError(error.message || `Failed to poll ${clipKey} job`);
+                }
+              }, 5000); // Poll every 5 seconds
+            };
+            
+            // Start polling for both jobs
+            poll('clip1', jobId1);
+            poll('clip2', jobId2);
+            
           } catch (error: any) {
             store.setError(error.message || "Failed to generate videos");
-          } finally {
             store.setIsLoading(false);
           }
+          // Note: We don't set isLoading to false here because the polling will continue
+          // Each component should check its own loading state based on job status
         }
       },
       position: { x: 800, y: 100 },
@@ -413,13 +585,35 @@ export default function Home() {
           store.setError(null);
           
           try {
-            // Placeholder for API call - will implement full functionality
-            console.log("Stitching videos:", store.selectedVideos);
-            // Simulate API delay for now
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Get URLs of selected generated videos
+            const clipUrls = store.selectedVideos.map(key => {
+              const video = store.generatedVideos[key];
+              if (!video || !video.videos || video.videos.length === 0) {
+                throw new Error(`No video URL available for ${key}`);
+              }
+              // Use the first video from each clip (index 0)
+              return video.videos[0];
+            });
             
-            // For demo, set a mock final video URL
-            store.setFinalVideoUrl('https://example.com/final.mp4');
+            // Call the stitch API
+            const response = await fetch('/api/stitch', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': process.env.NEXT_PUBLIC_ADMIN_TOKEN || 'development-token'
+              },
+              body: JSON.stringify({ clips: clipUrls })
+            });
+            
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to stitch videos');
+            }
+            
+            // Get the final video URL from the response
+            const data = await response.json();
+            store.setFinalVideoUrl(data.finalVideoUrl);
+            
           } catch (error: any) {
             store.setError(error.message || "Failed to stitch videos");
           } finally {

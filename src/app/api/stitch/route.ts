@@ -3,6 +3,7 @@ import { stitchVideos } from "../../lib/ffmpeg";
 import fs from "fs/promises";
 import { dir } from "tmp-promise";
 import path from "path";
+import { uploadToTempHost } from "../../lib/tempHost";
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,19 +49,14 @@ export async function POST(request: NextRequest) {
       fileName: "final.mp4"
     });
     
-    // Read the final video
-    const videoBuffer = await fs.readFile(outputPath);
+    // Upload the final video to a temporary host to get a public URL
+    const finalVideoUrl = await uploadToTempHost(outputPath);
     
     // Clean up temp files
-    // Note: We'll use a cleanup function in production but skip for now
+    // Note: tmp-promise with unsafeCleanup will handle this automatically
     
-    // Return the final video
-    return new Response(videoBuffer, {
-      headers: {
-        "Content-Type": "video/mp4",
-        "Content-Disposition": "attachment; filename=final.mp4"
-      }
-    });
+    // Return the final video URL
+    return NextResponse.json({ finalVideoUrl });
   } catch (error: any) {
     console.error("Error in stitch route:", error);
     return NextResponse.json(
