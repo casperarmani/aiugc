@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -662,6 +662,98 @@ export default function Home() {
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
     []
   );
+  
+  // Update nodes when store values change
+  useEffect(() => {
+    setNodes(nodes => 
+      nodes.map(node => {
+        if (node.id === '1') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              tikTokUrl: store.tikTokUrl
+            }
+          };
+        }
+        // Update other nodes as well
+        else if (node.id === '2') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              frames: store.frames,
+              selectedFrames: store.selectedFrames
+            }
+          };
+        }
+        else if (node.id === '3') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              faceImage: store.faceImage
+            }
+          };
+        }
+        else if (node.id === '4') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              isLoading: store.isLoading,
+              canSwap: store.faceImage !== null && store.selectedFrames.length > 0,
+              swappedFrames: store.swappedFrames
+            }
+          };
+        }
+        else if (node.id === '5') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              prompt: store.prompt,
+              isLoading: store.isLoading,
+              canGenerate: Object.keys(store.swappedFrames).length > 0 && store.prompt.length > 0
+            }
+          };
+        }
+        else if (node.id === '6') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              generatedVideos: store.generatedVideos,
+              selectedVideos: store.selectedVideos,
+              isLoading: store.isLoading,
+              canStitch: store.selectedVideos.length > 0
+            }
+          };
+        }
+        else if (node.id === '7') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              finalVideoUrl: store.finalVideoUrl
+            }
+          };
+        }
+        return node;
+      })
+    );
+  }, [
+    store.tikTokUrl, 
+    store.frames, 
+    store.selectedFrames, 
+    store.faceImage, 
+    store.swappedFrames, 
+    store.isLoading, 
+    store.prompt,
+    store.generatedVideos,
+    store.selectedVideos,
+    store.finalVideoUrl
+  ]);
 
   return (
     <div className="h-screen w-full">
